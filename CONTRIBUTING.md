@@ -85,4 +85,4 @@ Please keep docs practical and honest:
 
 ## Reporting Security Issues
 
-Please do not open public issues for security problems. Follow the process in [SECURITY.md](/Users/vaib/Documents/Projects/codes/chart/SECURITY.md).
+Please do not open public issues for security problems. Follow the process in [SECURITY.md](./SECURITY.md).

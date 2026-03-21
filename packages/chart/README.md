@@ -206,8 +206,8 @@ bun run example
 
 ## Contributing
 
-See [CONTRIBUTING.md](/Users/vaib/Documents/Projects/codes/chart/CONTRIBUTING.md) for local setup, coding expectations, and pull request guidance.
+See [CONTRIBUTING.md](https://github.com/Vaib215/react-native-nitro-charts/blob/main/CONTRIBUTING.md) for local setup, coding expectations, and pull request guidance.
 
 ## License
 
-MIT. See [LICENSE](/Users/vaib/Documents/Projects/codes/chart/LICENSE).
+MIT. See [LICENSE](https://github.com/Vaib215/react-native-nitro-charts/blob/main/LICENSE).

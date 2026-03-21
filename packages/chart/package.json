@@ -4,6 +4,14 @@
   "private": false,
   "description": "High-performance charting primitives for Expo apps using Skia, D3, and Nitro.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vaib215/react-native-nitro-charts.git"
+  },
+  "homepage": "https://github.com/Vaib215/react-native-nitro-charts#readme",
+  "bugs": {
+    "url": "https://github.com/Vaib215/react-native-nitro-charts/issues"
+  },
   "keywords": [
     "react-native",
     "expo",
