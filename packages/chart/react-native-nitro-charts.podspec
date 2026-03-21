@@ -7,15 +7,14 @@ Pod::Spec.new do |s|
   s.version      = package['version']
   s.summary      = package['description']
   s.license      = 'MIT'
-  s.homepage     = 'https://github.com/placeholder/react-native-nitro-charts'
-  s.author       = { 'author' => 'author@example.com' }
+  s.homepage     = 'https://github.com/vaib215/react-native-nitro-charts'
+  s.author       = { 'Vaibhav Kumar Singh' => 'sisodiya.vaib215@gmail.com' }
   s.platforms    = { :ios => '15.1' }
-  s.source       = { :git => 'https://github.com/placeholder/react-native-nitro-charts.git', :tag => s.version.to_s }
+  s.source       = { :git => 'https://github.com/vaib215/react-native-nitro-charts.git', :tag => s.version.to_s }
   s.source_files = 'ios/**/*.{h,m,mm,swift}', 'cpp/**/*.{hpp,cpp,c,h}'
   s.dependency 'React-Core'
   s.dependency 'React-callinvoker'
   s.dependency 'ReactCommon/turbomodule/core'
-  s.dependency 'expo-modules-core'
   s.dependency 'NitroModules'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
