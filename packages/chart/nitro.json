@@ -1,0 +1,28 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": [
+    "charts"
+  ],
+  "ios": {
+    "iosModuleName": "ExpoCharts"
+  },
+  "android": {
+    "androidNamespace": [
+      "charts"
+    ],
+    "androidCxxLibName": "ExpoCharts"
+  },
+  "autolinking": {
+    "ChartEngineNitro": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridChartEngineNitro"
+      }
+    }
+  },
+  "ignorePaths": [
+    "**/node_modules",
+    "**/dist"
+  ],
+  "gitAttributesGeneratedFlag": true
+}

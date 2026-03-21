@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Nitro Charts Example",
+    "slug": "nitro-charts-example",
+    "scheme": "nitrocharts",
+    "plugins": [
+      "expo-router"
+    ],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "android": {
+      "package": "com.vaib215.nitrochartsexample"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+.expo
+dist
+coverage
+nitrogen/generated
+*.tsbuildinfo
+ios
+android
+.DS_Store
