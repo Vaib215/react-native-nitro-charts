@@ -19,7 +19,7 @@ export default function RootLayout() {
           },
           headerTintColor: '#0f1720',
           headerTitleStyle: {
-            fontWeight: '700',
+            display: 'none'
           },
           sceneStyle: {
             backgroundColor: '#f5f7f8',

@@ -16,6 +16,9 @@
     },
     "android": {
       "package": "com.vaib215.nitrochartsexample"
+    },
+    "ios": {
+      "bundleIdentifier": "com.vaib215.nitrochartsexample"
     }
   }
 }
