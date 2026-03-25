@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-charts",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": false,
   "description": "High-performance charting primitives for Expo apps using Skia, D3, and Nitro.",
   "license": "MIT",

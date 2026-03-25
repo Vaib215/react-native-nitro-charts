@@ -44,7 +44,7 @@
     },
     "packages/chart": {
       "name": "react-native-nitro-charts",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "d3-array": "^3.2.4",
         "d3-scale": "^4.0.2",
