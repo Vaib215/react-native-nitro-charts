@@ -1,6 +1,6 @@
 import React from 'react';
-import { PanResponder, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Canvas, Circle, Line as SkiaLine, Path, Rect } from '@shopify/react-native-skia';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { CandlestickChart, CandlestickNavigator, useChartEntrance } from 'react-native-nitro-charts';
 
 type Candle = {
   timestamp: number;
@@ -10,25 +10,6 @@ type Candle = {
   low: number;
   close: number;
   volume: number;
-};
-
-type ChartPoint = {
-  x: number;
-  y: number;
-};
-
-type DecoratedCandle = Candle & {
-  index: number;
-  centerX: number;
-  openY: number;
-  closeY: number;
-  highY: number;
-  lowY: number;
-  bodyTop: number;
-  bodyHeight: number;
-  bodyWidth: number;
-  volumeTop: number;
-  isUp: boolean;
 };
 
 const LIFETIME_POINTS = 365;
@@ -53,18 +34,55 @@ function formatCompactVolume(value: number) {
   return `${(value / 1_000).toFixed(0)}K`;
 }
 
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
 function generateCandles(points: number) {
   const start = Date.UTC(2024, 0, 2);
   const candles: Candle[] = [];
+  const rand = seededRandom(42);
+  const gauss = () => {
+    let u = 0;
+    let v = 0;
+    while (u === 0) u = rand();
+    while (v === 0) v = rand();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  };
+
   let previousClose = 182;
+  let volatility = 0.018;
+  let trendBias = 0.0004;
 
   for (let index = 0; index < points; index += 1) {
-    const drift = Math.sin(index / 5) * 6.5 + Math.cos(index / 13) * 3.2 + index * 0.12;
-    const open = previousClose + Math.sin(index * 1.6) * 1.9;
-    const close = open + Math.sin(index / 2.3) * 5.8 + Math.cos(index / 8.5) * 2.9 + drift * 0.18;
-    const high = Math.max(open, close) + 2.6 + ((index % 5) * 0.55);
-    const low = Math.min(open, close) - 2.2 - ((index % 4) * 0.52);
-    const volume = 1_600_000 + Math.round((Math.sin(index / 6) + 1.3) * 760_000 + index * 9_000);
+    if (rand() < 0.08) {
+      trendBias = (rand() - 0.45) * 0.002;
+    }
+    if (rand() < 0.05) {
+      volatility = 0.008 + rand() * 0.03;
+    }
+
+    const dailyReturn = trendBias + gauss() * volatility;
+    const gap = gauss() * previousClose * 0.004;
+    const open = previousClose + gap;
+    const bodySize = Math.abs(gauss()) * previousClose * volatility * 0.9;
+    const direction = rand() < (0.5 + trendBias * 80) ? 1 : -1;
+    const close = open + direction * bodySize + dailyReturn * previousClose;
+
+    const upperWick = Math.abs(gauss()) * previousClose * volatility * 0.7;
+    const lowerWick = Math.abs(gauss()) * previousClose * volatility * 0.7;
+    const high = Math.max(open, close) + upperWick;
+    const low = Math.min(open, close) - lowerWick;
+
+    const baseVolume = 8_000_000 + gauss() * 3_000_000;
+    const spike = rand() < 0.07 ? 2 + rand() * 3 : 1;
+    const bigMoveBoost = Math.abs(dailyReturn) > 0.02 ? 1.8 : 1;
+    const volume = Math.max(500_000, Math.round(baseVolume * spike * bigMoveBoost));
+
     const date = new Date(start + index * 24 * 60 * 60 * 1000);
 
     candles.push({
@@ -85,143 +103,10 @@ function generateCandles(points: number) {
 
 const lifetimeCandles = generateCandles(LIFETIME_POINTS);
 
-function useChartEntrance(keys: React.DependencyList) {
-  const [progress, setProgress] = React.useState(0);
-
-  React.useEffect(() => {
-    let frame = 0;
-    const startedAt = Date.now();
-    setProgress(0);
-
-    const tick = () => {
-      const elapsed = Date.now() - startedAt;
-      const eased = 1 - Math.pow(1 - Math.min(elapsed / 650, 1), 3);
-      setProgress(eased);
-      if (eased < 1) {
-        frame = requestAnimationFrame(tick);
-      }
-    };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, keys);
-
-  return progress;
-}
-
-function buildLinePath(points: ChartPoint[]) {
-  if (points.length === 0) {
-    return '';
-  }
-
-  return points.reduce((path, point, index) => {
-    const command = index === 0 ? 'M' : 'L';
-    return `${path}${command}${point.x.toFixed(2)},${point.y.toFixed(2)} `;
-  }, '');
-}
-
-function averageLine(data: Candle[], size: number, accessor: (item: Candle) => number) {
-  const values: Array<number | null> = [];
-  let sum = 0;
-
-  for (let index = 0; index < data.length; index += 1) {
-    sum += accessor(data[index]);
-    if (index >= size) {
-      sum -= accessor(data[index - size]);
-    }
-    values.push(index >= size - 1 ? sum / size : null);
-  }
-
-  return values;
-}
-
-function useCandlestickGeometry(data: Candle[], width: number, height: number, progress: number) {
-  return React.useMemo(() => {
-    const padding = { top: 18, right: 76, bottom: 28, left: 18 };
-    const volumeHeight = 82;
-    const gap = 18;
-    const priceHeight = Math.max(height - padding.top - padding.bottom - volumeHeight - gap, 180);
-    const chartWidth = Math.max(width - padding.left - padding.right, 1);
-    const minLow = Math.min(...data.map((item) => item.low));
-    const maxHigh = Math.max(...data.map((item) => item.high));
-    const maxVolume = Math.max(...data.map((item) => item.volume));
-    const span = Math.max(maxHigh - minLow, 1);
-    const extendedMin = minLow - span * 0.08;
-    const extendedMax = maxHigh + span * 0.08;
-    const step = chartWidth / Math.max(data.length, 1);
-    const bodyWidth = Math.max(Math.min(step * 0.62, 16), 4);
-    const volumeBase = padding.top + priceHeight + gap + volumeHeight;
-    const sma9 = averageLine(data, 9, (item) => item.close);
-    const sma21 = averageLine(data, 21, (item) => item.close);
-
-    const scaleY = (value: number) => padding.top + ((extendedMax - value) / (extendedMax - extendedMin)) * priceHeight;
-    const scaleVolumeY = (value: number) => volumeBase - (value / Math.max(maxVolume, 1)) * volumeHeight;
-
-    const allCandles: DecoratedCandle[] = data.map((datum, index) => {
-      const centerX = padding.left + step * index + step / 2;
-      const openY = scaleY(datum.open);
-      const closeY = scaleY(datum.close);
-      const highY = scaleY(datum.high);
-      const lowY = scaleY(datum.low);
-      const bodyTop = Math.min(openY, closeY);
-      const bodyBottom = Math.max(openY, closeY);
-      return {
-        ...datum,
-        index,
-        centerX,
-        openY,
-        closeY,
-        highY,
-        lowY,
-        bodyTop,
-        bodyHeight: Math.max(bodyBottom - bodyTop, 2),
-        bodyWidth,
-        volumeTop: scaleVolumeY(datum.volume),
-        isUp: datum.close >= datum.open,
-      };
-    });
-
-    const visibleCount = Math.max(1, Math.round(allCandles.length * progress));
-    const visibleCandles = allCandles.slice(0, visibleCount);
-    const labels = allCandles.filter((_, index) => index === 0 || index === allCandles.length - 1 || index === Math.floor((allCandles.length - 1) / 2));
-
-    const averagePath9 = buildLinePath(
-      allCandles
-        .map((candle, index) => {
-          const value = sma9[index];
-          return value === null ? null : { x: candle.centerX, y: scaleY(value) };
-        })
-        .filter((point): point is ChartPoint => point !== null)
-    );
-
-    const averagePath21 = buildLinePath(
-      allCandles
-        .map((candle, index) => {
-          const value = sma21[index];
-          return value === null ? null : { x: candle.centerX, y: scaleY(value) };
-        })
-        .filter((point): point is ChartPoint => point !== null)
-    );
-
-    return {
-      allCandles,
-      candles: visibleCandles,
-      labels,
-      padding,
-      chartWidth,
-      priceHeight,
-      volumeHeight,
-      gap,
-      volumeBase,
-      step,
-      minPrice: extendedMin,
-      maxPrice: extendedMax,
-      maxVolume,
-      averagePath9,
-      averagePath21,
-    };
-  }, [data, height, progress, width]);
-}
+const OVERLAYS = [
+  { window: 9, color: '#f59e0b', label: 'SMA 9' },
+  { window: 21, color: '#60a5fa', label: 'SMA 21' },
+];
 
 function useViewport(dataLength: number, defaultVisible: number) {
   const [visibleCount, setVisibleCount] = React.useState(defaultVisible);
@@ -255,384 +140,6 @@ function MetricCard({ label, value, accent }: { label: string; value: string; ac
   );
 }
 
-const Navigator = React.memo(function Navigator({
-  data,
-  width,
-  start,
-  end,
-  onPanWindow,
-  onResizeWindow,
-}: {
-  data: Candle[];
-  width: number;
-  start: number;
-  end: number;
-  onPanWindow: (nextCenter: number) => void;
-  onResizeWindow: (edge: 'left' | 'right', nextIndex: number) => void;
-}) {
-  const usableWidth = Math.max(width - 24, 1);
-  const maxClose = Math.max(...data.map((item) => item.close));
-  const minClose = Math.min(...data.map((item) => item.close));
-  const span = Math.max(maxClose - minClose, 1);
-  const points = data.map((item, index) => {
-    const x = 12 + (index / Math.max(data.length - 1, 1)) * usableWidth;
-    const y = 44 - ((item.close - minClose) / span) * 28;
-    return { x, y };
-  });
-  const timeMarkers = data.filter((_, index) => {
-    if (index === 0 || index === data.length - 1) {
-      return true;
-    }
-    return index === Math.floor((data.length - 1) / 3) || index === Math.floor(((data.length - 1) * 2) / 3);
-  });
-  const viewportLeft = 12 + (start / Math.max(data.length, 1)) * usableWidth;
-  const viewportWidth = ((end - start) / Math.max(data.length, 1)) * usableWidth;
-  const dragMode = React.useRef<'window' | 'left' | 'right' | null>(null);
-  const pickDragMode = React.useCallback(
-    (locationX: number) => {
-      const leftHandleX = viewportLeft;
-      const rightHandleX = viewportLeft + Math.max(viewportWidth, 24);
-      if (Math.abs(locationX - leftHandleX) <= 18) {
-        return 'left' as const;
-      }
-      if (Math.abs(locationX - rightHandleX) <= 18) {
-        return 'right' as const;
-      }
-      return 'window' as const;
-    },
-    [viewportLeft, viewportWidth]
-  );
-  const indexFromLocation = React.useCallback(
-    (locationX: number) => {
-      const ratio = Math.max(0, Math.min(1, (locationX - 12) / usableWidth));
-      return Math.round(ratio * data.length);
-    },
-    [data.length, usableWidth]
-  );
-  const updateDrag = React.useCallback(
-    (locationX: number) => {
-      const nextIndex = indexFromLocation(locationX);
-      if (dragMode.current === 'window') {
-        onPanWindow(nextIndex);
-        return;
-      }
-      if (dragMode.current === 'left' || dragMode.current === 'right') {
-        onResizeWindow(dragMode.current, nextIndex);
-      }
-    },
-    [indexFromLocation, onPanWindow, onResizeWindow]
-  );
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
-          dragMode.current = pickDragMode(event.nativeEvent.locationX);
-          updateDrag(event.nativeEvent.locationX);
-        },
-        onPanResponderMove: (event) => {
-          if (!dragMode.current) {
-            return;
-          }
-          updateDrag(event.nativeEvent.locationX);
-        },
-        onPanResponderRelease: () => {
-          dragMode.current = null;
-        },
-        onPanResponderTerminate: () => {
-          dragMode.current = null;
-        },
-      }),
-    [pickDragMode, updateDrag]
-  );
-
-  return (
-    <View style={[styles.navigator, { width }]}>
-      <View style={styles.navigatorGlow} />
-      <Canvas style={{ width, height: 56 }}>
-        <Path path={buildLinePath(points)} color="#7dd3fc" style="stroke" strokeWidth={1.6} />
-      </Canvas>
-      <View style={[styles.navigatorViewport, { left: viewportLeft, width: Math.max(viewportWidth, 24) }]} />
-      <View style={[styles.navigatorHandle, styles.navigatorHandleLeft, { left: viewportLeft - 7 }]} />
-      <View style={[styles.navigatorHandle, styles.navigatorHandleRight, { left: viewportLeft + Math.max(viewportWidth, 24) - 7 }]} />
-      <View pointerEvents="none" style={styles.navigatorScale}>
-        {timeMarkers.map((item, index) => {
-          const ratio = index === 0 ? 0 : index === timeMarkers.length - 1 ? 1 : index === 1 ? 1 / 3 : 2 / 3;
-          const left = 12 + ratio * usableWidth;
-          return (
-            <View key={`${item.timestamp}-marker`} style={[styles.navigatorMarker, { left: left - 20 }]}>
-              <View style={styles.navigatorMarkerTick} />
-              <Text style={styles.navigatorMarkerText}>{item.label}</Text>
-            </View>
-          );
-        })}
-      </View>
-      <View style={styles.navigatorHint}>
-        <Text style={styles.navigatorHintText}>Drag center to pan, drag corners to resize</Text>
-      </View>
-      <View
-        style={StyleSheet.absoluteFill}
-        onPointerDown={(event) => {
-          const locationX = event.nativeEvent.offsetX ?? 0;
-          dragMode.current = pickDragMode(locationX);
-          updateDrag(locationX);
-        }}
-        onPointerMove={(event) => {
-          if (!dragMode.current) {
-            return;
-          }
-          updateDrag(event.nativeEvent.offsetX ?? 0);
-        }}
-        onPointerUp={() => {
-          dragMode.current = null;
-        }}
-        onPointerLeave={() => {
-          dragMode.current = null;
-        }}
-        {...panResponder.panHandlers}
-      />
-    </View>
-  );
-});
-
-const TradingChart = React.memo(function TradingChart({
-  data,
-  width,
-  height,
-  visibleCount,
-  onPinchZoom,
-}: {
-  data: Candle[];
-  width: number;
-  height: number;
-  visibleCount: number;
-  onPinchZoom: (nextVisibleCount: number, anchorRatio: number) => void;
-}) {
-  const progress = useChartEntrance([]);
-  const geometry = useCandlestickGeometry(data, width, height, progress);
-  const [activeIndex, setActiveIndex] = React.useState(Math.max(geometry.allCandles.length - 1, 0));
-  const pinchStartDistance = React.useRef(0);
-  const pinchStartVisibleCount = React.useRef(visibleCount);
-  const priceTicks = [0, 0.25, 0.5, 0.75, 1];
-  const volumeTicks = [0, 0.5, 1];
-
-  React.useEffect(() => {
-    setActiveIndex(Math.max(geometry.allCandles.length - 1, 0));
-  }, [geometry.allCandles.length]);
-
-  React.useEffect(() => {
-    pinchStartVisibleCount.current = visibleCount;
-  }, [visibleCount]);
-
-  const activeCandle = geometry.allCandles[activeIndex] ?? geometry.allCandles[geometry.allCandles.length - 1];
-
-  const handleHover = React.useCallback(
-    (locationX: number) => {
-      const relative = locationX - geometry.padding.left;
-      const nextIndex = Math.max(0, Math.min(geometry.allCandles.length - 1, Math.round(relative / geometry.step - 0.5)));
-      setActiveIndex(nextIndex);
-    },
-    [geometry.allCandles.length, geometry.padding.left, geometry.step]
-  );
-
-  const handleWheelZoom = React.useCallback(
-    (event: { nativeEvent: { offsetX?: number; deltaY?: number; ctrlKey?: boolean }; preventDefault?: () => void }) => {
-      if (!event.nativeEvent.ctrlKey) {
-        return;
-      }
-
-      event.preventDefault?.();
-      const deltaY = event.nativeEvent.deltaY ?? 0;
-      const zoomFactor = deltaY > 0 ? 1.12 : 0.88;
-      const nextVisibleCount = Math.max(MIN_VISIBLE_CANDLES, Math.round(visibleCount * zoomFactor));
-      const anchorRatio = Math.max(
-        0,
-        Math.min(1, ((event.nativeEvent.offsetX ?? geometry.padding.left) - geometry.padding.left) / Math.max(geometry.chartWidth, 1))
-      );
-      onPinchZoom(nextVisibleCount, anchorRatio);
-    },
-    [geometry.chartWidth, geometry.padding.left, onPinchZoom, visibleCount]
-  );
-
-  const beginPinch = React.useCallback((touches: readonly { pageX: number; pageY: number }[]) => {
-    if (touches.length < 2) {
-      return;
-    }
-    const [a, b] = touches;
-    pinchStartDistance.current = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
-    pinchStartVisibleCount.current = visibleCount;
-  }, [visibleCount]);
-
-  const updatePinch = React.useCallback(
-    (touches: readonly { pageX: number; pageY: number; locationX?: number }[]) => {
-      if (touches.length < 2 || pinchStartDistance.current <= 0) {
-        return;
-      }
-      const [a, b] = touches;
-      const distance = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
-      const midpointX = ((a.locationX ?? 0) + (b.locationX ?? 0)) / 2;
-      const scale = distance / pinchStartDistance.current;
-      const nextVisibleCount = Math.max(MIN_VISIBLE_CANDLES, Math.round(pinchStartVisibleCount.current / Math.max(scale, 0.4)));
-      const anchorRatio = Math.max(0, Math.min(1, (midpointX - geometry.padding.left) / Math.max(geometry.chartWidth, 1)));
-      onPinchZoom(nextVisibleCount, anchorRatio);
-    },
-    [geometry.chartWidth, geometry.padding.left, onPinchZoom]
-  );
-
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
-          const touches = event.nativeEvent.touches;
-          if (touches.length >= 2) {
-            beginPinch(touches);
-            return;
-          }
-          handleHover(event.nativeEvent.locationX);
-        },
-        onPanResponderMove: (event) => {
-          const touches = event.nativeEvent.touches;
-          if (touches.length >= 2) {
-            updatePinch(touches);
-            return;
-          }
-          handleHover(event.nativeEvent.locationX);
-        },
-        onPanResponderRelease: () => {
-          pinchStartDistance.current = 0;
-        },
-        onPanResponderTerminate: () => {
-          pinchStartDistance.current = 0;
-        },
-      }),
-    [beginPinch, handleHover, updatePinch]
-  );
-
-  return (
-    <View style={[styles.chartShell, { width, height }]}>
-      <View pointerEvents="none" style={styles.axisLayer}>
-        {priceTicks.map((tick) => {
-          const price = geometry.maxPrice - (geometry.maxPrice - geometry.minPrice) * tick;
-          const top = geometry.padding.top + geometry.priceHeight * tick;
-          return (
-            <View key={`price-${tick}`} style={[styles.gridRow, { top }]}>
-              <View style={styles.gridLine} />
-              <Text style={styles.gridLabel}>{formatMoney(price)}</Text>
-            </View>
-          );
-        })}
-
-        {volumeTicks.map((tick) => {
-          const top = geometry.volumeBase - geometry.volumeHeight * tick;
-          const volume = geometry.maxVolume * tick;
-          return (
-            <View key={`volume-${tick}`} style={[styles.gridRow, { top }]}>
-              <View style={styles.gridLineMuted} />
-              <Text style={styles.gridLabelMuted}>{formatCompactVolume(volume)}</Text>
-            </View>
-          );
-        })}
-      </View>
-
-      <Canvas style={{ width, height }}>
-        <Path path={geometry.averagePath21} color="#60a5fa" style="stroke" strokeWidth={1.8} />
-        <Path path={geometry.averagePath9} color="#f59e0b" style="stroke" strokeWidth={1.8} />
-
-        {geometry.candles.map((candle) => {
-          const color = candle.isUp ? '#22c55e' : '#f43f5e';
-          return (
-            <React.Fragment key={candle.timestamp}>
-              <Rect
-                x={candle.centerX - candle.bodyWidth / 2}
-                y={candle.volumeTop}
-                width={Math.max(candle.bodyWidth * 0.88, 2)}
-                height={Math.max(geometry.volumeBase - candle.volumeTop, 2)}
-                color={candle.isUp ? 'rgba(34,197,94,0.32)' : 'rgba(244,63,94,0.28)'}
-              />
-              <SkiaLine p1={{ x: candle.centerX, y: candle.highY }} p2={{ x: candle.centerX, y: candle.lowY }} color={color} strokeWidth={1.4} />
-              <Rect x={candle.centerX - candle.bodyWidth / 2} y={candle.bodyTop} width={candle.bodyWidth} height={candle.bodyHeight} color={color} />
-            </React.Fragment>
-          );
-        })}
-
-        {activeCandle ? (
-          <>
-            <SkiaLine
-              p1={{ x: activeCandle.centerX, y: geometry.padding.top }}
-              p2={{ x: activeCandle.centerX, y: geometry.volumeBase }}
-              color="rgba(226,232,240,0.24)"
-              strokeWidth={1}
-            />
-            <SkiaLine
-              p1={{ x: geometry.padding.left, y: activeCandle.closeY }}
-              p2={{ x: width - geometry.padding.right, y: activeCandle.closeY }}
-              color="rgba(226,232,240,0.16)"
-              strokeWidth={1}
-            />
-            <Circle cx={activeCandle.centerX} cy={activeCandle.closeY} r={4.6} color="#f8fafc" />
-            <Circle cx={activeCandle.centerX} cy={activeCandle.closeY} r={2.2} color={activeCandle.isUp ? '#22c55e' : '#f43f5e'} />
-          </>
-        ) : null}
-      </Canvas>
-
-      {activeCandle ? (
-        <>
-          <View pointerEvents="none" style={[styles.floatingPriceTag, { top: activeCandle.closeY - 12 }]}>
-            <Text style={styles.floatingPriceText}>{formatMoney(activeCandle.close)}</Text>
-          </View>
-          <View pointerEvents="none" style={[styles.floatingDateTag, { left: activeCandle.centerX - 34 }]}>
-            <Text style={styles.floatingDateText}>{activeCandle.label}</Text>
-          </View>
-        </>
-      ) : null}
-
-      {activeCandle ? (
-        <View pointerEvents="none" style={styles.legendHudRow}>
-          <View style={styles.legendHud}>
-            <Text style={styles.legendHudText}>
-              {activeCandle.label}  O {formatMoney(activeCandle.open)}  H {formatMoney(activeCandle.high)}  L {formatMoney(activeCandle.low)}  C {formatMoney(activeCandle.close)}  V {formatCompactVolume(activeCandle.volume)}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      <View pointerEvents="none" style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#f59e0b' }]} />
-          <Text style={styles.legendText}>SMA 9</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#60a5fa' }]} />
-          <Text style={styles.legendText}>SMA 21</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: '#22c55e' }]} />
-          <Text style={styles.legendText}>Volume</Text>
-        </View>
-      </View>
-
-      <View pointerEvents="none" style={styles.bottomLabelRow}>
-        {geometry.labels.map((label) => (
-          <Text key={`${label.timestamp}-axis`} style={[styles.bottomLabel, { left: label.centerX - 20 }]}>
-            {label.label}
-          </Text>
-        ))}
-      </View>
-
-      <View
-        style={StyleSheet.absoluteFill}
-        onPointerDown={(event) => handleHover(event.nativeEvent.offsetX ?? 0)}
-        onPointerMove={(event) => handleHover(event.nativeEvent.offsetX ?? 0)}
-        {...(Platform.OS === 'web' ? ({ onWheel: handleWheelZoom } as Record<string, unknown>) : {})}
-        {...panResponder.panHandlers}
-      />
-    </View>
-  );
-});
-
 export default function StockCandlesScreen() {
   const { width } = useWindowDimensions();
   const [availableWidth, setAvailableWidth] = React.useState<number | null>(null);
@@ -649,6 +156,7 @@ export default function StockCandlesScreen() {
   const rangeLow = Math.min(...visibleData.map((item) => item.low));
   const rangeHigh = Math.max(...visibleData.map((item) => item.high));
   const volume = visibleData.reduce((sum, item) => sum + item.volume, 0);
+  const progress = useChartEntrance([]);
 
   const jumpNavigator = React.useCallback(
     (nextCenter: number) => {
@@ -732,19 +240,30 @@ export default function StockCandlesScreen() {
             <MetricCard label="window high" value={formatMoney(rangeHigh)} />
           </View>
 
-          <TradingChart
+          <CandlestickChart
             data={visibleData}
             width={chartWidth - 36}
             height={chartHeight}
-            visibleCount={viewport.visibleCount}
+            openKey="open"
+            highKey="high"
+            lowKey="low"
+            closeKey="close"
+            volumeKey="volume"
+            labelKey="label"
+            progress={progress}
+            overlays={OVERLAYS}
             onPinchZoom={pinchZoom}
+            formatPriceLabel={formatMoney}
+            formatVolumeLabel={formatCompactVolume}
           />
 
-          <Navigator
+          <CandlestickNavigator
             data={allData}
             width={chartWidth - 36}
             start={viewport.start}
             end={viewport.end}
+            closeKey="close"
+            labelKey="label"
             onPanWindow={jumpNavigator}
             onResizeWindow={resizeWindow}
           />
@@ -913,217 +432,6 @@ const styles = StyleSheet.create({
   metricNumber: {
     color: '#0f1720',
     fontSize: 16,
-    fontWeight: '700',
-  },
-  chartShell: {
-    position: 'relative',
-    alignSelf: 'center',
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#fcfdfd',
-    borderWidth: 1,
-    borderColor: '#e5eaed',
-  },
-  axisLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gridRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  gridLine: {
-    flex: 1,
-    borderTopWidth: 1,
-    borderTopColor: '#e8edef',
-  },
-  gridLineMuted: {
-    flex: 1,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f3f5',
-  },
-  gridLabel: {
-    width: 72,
-    color: '#6b7a86',
-    fontSize: 11,
-    textAlign: 'right',
-    paddingRight: 12,
-  },
-  gridLabelMuted: {
-    width: 72,
-    color: '#8b98a3',
-    fontSize: 10,
-    textAlign: 'right',
-    paddingRight: 12,
-  },
-  floatingPriceTag: {
-    position: 'absolute',
-    right: 8,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#dbeafe',
-  },
-  floatingPriceText: {
-    color: '#0b2242',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  floatingDateTag: {
-    position: 'absolute',
-    bottom: 72,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#0f1720',
-  },
-  floatingDateText: {
-    color: '#f8fafc',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  legendRow: {
-    position: 'absolute',
-    bottom: 34,
-    left: 12,
-    right: 84,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  legendHudRow: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 84,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  legendHud: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderWidth: 1,
-    borderColor: '#dce4e8',
-  },
-  legendHudText: {
-    color: '#1f2a33',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: '#e1e7ea',
-  },
-  legendSwatch: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-  },
-  legendText: {
-    color: '#33424d',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  bottomLabelRow: {
-    position: 'absolute',
-    left: 0,
-    right: 76,
-    bottom: 8,
-    height: 18,
-  },
-  bottomLabel: {
-    position: 'absolute',
-    width: 56,
-    color: '#6b7a86',
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  navigator: {
-    position: 'relative',
-    alignSelf: 'center',
-    overflow: 'hidden',
-    borderRadius: 16,
-    backgroundColor: '#f7f9fa',
-    borderWidth: 1,
-    borderColor: '#e5eaed',
-    paddingHorizontal: 0,
-    paddingVertical: 8,
-  },
-  navigatorGlow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 118, 110, 0.03)',
-  },
-  navigatorViewport: {
-    position: 'absolute',
-    top: 8,
-    bottom: 34,
-    borderRadius: 14,
-    backgroundColor: 'rgba(15, 118, 110, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(15, 118, 110, 0.28)',
-  },
-  navigatorHandle: {
-    position: 'absolute',
-    top: 18,
-    width: 14,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#d9eeeb',
-    borderWidth: 1,
-    borderColor: 'rgba(15, 118, 110, 0.16)',
-  },
-  navigatorHandleLeft: {
-    marginLeft: 0,
-  },
-  navigatorHandleRight: {
-    marginLeft: 0,
-  },
-  navigatorScale: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 22,
-    height: 28,
-  },
-  navigatorMarker: {
-    position: 'absolute',
-    width: 40,
-    alignItems: 'center',
-    gap: 4,
-  },
-  navigatorMarkerTick: {
-    width: 1,
-    height: 8,
-    backgroundColor: '#c8d2d8',
-  },
-  navigatorMarkerText: {
-    color: '#6b7a86',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  navigatorHint: {
-    alignItems: 'center',
-    paddingTop: 2,
-  },
-  navigatorHintText: {
-    color: '#6b7a86',
-    fontSize: 11,
     fontWeight: '700',
   },
   footerRow: {

@@ -11,6 +11,7 @@ High-performance chart primitives for Expo and React Native, powered by Skia for
 - Nitro-native execution path for downsampling and hit testing on iOS and Android
 - TypeScript fallback engine for web and non-native environments
 - Headless chart geometry exports for fully custom rendering
+- Interactive candlestick chart with OHLCV rendering, SMA overlays, and a timeline navigator
 
 ## What Is In This Repo
 
@@ -25,7 +26,9 @@ Version `0.0.1` currently includes:
 - `AreaChart`
 - `BarChart`
 - `DonutChart`
-- hooks such as `useLineChart`, `useAreaChart`, `useBarChart`, `useDonutChart`, `useNearestPoint`, and `useChartPressState`
+- `CandlestickChart`
+- `CandlestickNavigator`
+- hooks such as `useLineChart`, `useAreaChart`, `useBarChart`, `useDonutChart`, `useNearestPoint`, `useChartPressState`, and `useChartEntrance`
 - geometry helpers exported from `headless/models`
 
 Package installation, usage examples, and API details live in [packages/chart/README.md](./packages/chart/README.md).

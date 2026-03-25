@@ -47,7 +47,7 @@ export function OverviewPage() {
           items={[
             { label: 'Package', value: 'react-native-nitro-charts' },
             { label: 'Current version', value: '0.0.1' },
-            { label: 'Charts', value: 'Line, Area, Bar, Donut' },
+            { label: 'Charts', value: 'Line, Area, Bar, Donut, Candlestick' },
             { label: 'Rendering', value: 'React Native Skia' },
             { label: 'Geometry', value: 'D3 + headless helpers' },
             { label: 'Native engine', value: 'Nitro on iOS and Android' },
@@ -144,6 +144,16 @@ export function ComponentsPage() {
           <Text style={styles.apiDescription}>Part-to-whole chart with slice hit testing and selection.</Text>
           <Text style={styles.apiProps}>Props: <InlineCode>data</InlineCode>, <InlineCode>innerRadius</InlineCode>, <InlineCode>outerRadius</InlineCode>, <InlineCode>selectedIndex</InlineCode>, <InlineCode>onSlicePress</InlineCode></Text>
         </View>
+        <View style={styles.apiCard}>
+          <Text style={styles.apiTitle}>CandlestickChart</Text>
+          <Text style={styles.apiDescription}>Interactive OHLCV candlestick chart with volume bars, SMA overlays, crosshair inspection, and pinch-to-zoom.</Text>
+          <Text style={styles.apiProps}>Props: <InlineCode>data</InlineCode>, <InlineCode>openKey</InlineCode>, <InlineCode>highKey</InlineCode>, <InlineCode>lowKey</InlineCode>, <InlineCode>closeKey</InlineCode>, <InlineCode>volumeKey</InlineCode>, <InlineCode>labelKey</InlineCode>, <InlineCode>overlays</InlineCode>, <InlineCode>onPinchZoom</InlineCode></Text>
+        </View>
+        <View style={styles.apiCard}>
+          <Text style={styles.apiTitle}>CandlestickNavigator</Text>
+          <Text style={styles.apiDescription}>Timeline range selector with sparkline overview and draggable viewport handles for panning and resizing.</Text>
+          <Text style={styles.apiProps}>Props: <InlineCode>data</InlineCode>, <InlineCode>closeKey</InlineCode>, <InlineCode>labelKey</InlineCode>, <InlineCode>start</InlineCode>, <InlineCode>end</InlineCode>, <InlineCode>onPanWindow</InlineCode>, <InlineCode>onResizeWindow</InlineCode></Text>
+        </View>
       </View>
     </PageSection>
   );
@@ -165,6 +175,7 @@ export function HooksPage() {
           <Text style={styles.listItem}><InlineCode>useBarChart</InlineCode> and <InlineCode>useDonutChart</InlineCode> return geometry plus hit-testing helpers.</Text>
           <Text style={styles.listItem}><InlineCode>useNearestPoint</InlineCode> resolves the closest rendered point for cursor or tooltip UIs.</Text>
           <Text style={styles.listItem}><InlineCode>useChartPressState</InlineCode> stores the active item with transition-friendly updates.</Text>
+          <Text style={styles.listItem}><InlineCode>useChartEntrance</InlineCode> animates a progress value from 0 to 1 for chart reveal animations.</Text>
         </View>
       </Panel>
     </PageSection>

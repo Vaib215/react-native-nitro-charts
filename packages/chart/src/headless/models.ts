@@ -8,12 +8,17 @@ import { getCategoryValue, getNumericValue } from '../utils/accessors';
 import type {
   BarChartProps,
   BarGeometry,
+  CandlestickCandleGeometry,
+  CandlestickChartProps,
+  CandlestickGeometry,
+  CandlestickNavigatorProps,
   CartesianChartProps,
   DatumPoint,
   DonutChartDatum,
   DonutChartProps,
   DonutSliceGeometry,
   LineGeometry,
+  NumericAccessor,
 } from '../types';
 
 type CartesianFrame = {
@@ -204,4 +209,208 @@ export function findNearestDonutSlice(
   }
 
   return slices.find((slice) => angle >= slice.startAngle && angle <= slice.endAngle) ?? null;
+}
+
+function buildPolylinePath(points: DatumPoint[]) {
+  if (points.length === 0) {
+    return '';
+  }
+
+  return points.reduce((path, point, index) => {
+    const command = index === 0 ? 'M' : 'L';
+    return `${path}${command}${point.x.toFixed(2)},${point.y.toFixed(2)} `;
+  }, '');
+}
+
+function computeMovingAverage<T>(
+  data: T[],
+  window: number,
+  accessor: NumericAccessor<T>
+): Array<number | null> {
+  const values: Array<number | null> = [];
+  let sum = 0;
+
+  for (let index = 0; index < data.length; index += 1) {
+    sum += getNumericValue(data[index], accessor, index);
+    if (index >= window) {
+      sum -= getNumericValue(data[index - window], accessor, index - window);
+    }
+    values.push(index >= window - 1 ? sum / window : null);
+  }
+
+  return values;
+}
+
+export function computeCandlestickGeometry<T>(props: CandlestickChartProps<T>): CandlestickGeometry<T> {
+  const { data, openKey, highKey, lowKey, closeKey, volumeKey, labelKey } = props;
+  const paddingValues = resolvePadding(props.padding);
+  const padding = {
+    top: props.padding?.top ?? 18,
+    right: props.padding?.right ?? 76,
+    bottom: props.padding?.bottom ?? 28,
+    left: props.padding?.left ?? 18,
+  };
+  const volumeHeight = props.volumeHeight ?? 82;
+  const gap = props.gap ?? 18;
+  const progress = Math.max(0, Math.min(props.progress ?? 1, 1));
+  const height = props.height;
+  const width = props.width;
+
+  const priceHeight = Math.max(height - padding.top - padding.bottom - volumeHeight - gap, 180);
+  const chartWidth = Math.max(width - padding.left - padding.right, 1);
+
+  let minLow = Infinity;
+  let maxHigh = -Infinity;
+  let maxVolume = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    const low = getNumericValue(data[i], lowKey, i);
+    const high = getNumericValue(data[i], highKey, i);
+    const vol = getNumericValue(data[i], volumeKey, i);
+    if (low < minLow) minLow = low;
+    if (high > maxHigh) maxHigh = high;
+    if (vol > maxVolume) maxVolume = vol;
+  }
+
+  const span = Math.max(maxHigh - minLow, 1);
+  const extendedMin = minLow - span * 0.08;
+  const extendedMax = maxHigh + span * 0.08;
+  const step = chartWidth / Math.max(data.length, 1);
+  const bodyWidth = Math.max(Math.min(step * 0.62, 16), 4);
+  const volumeBase = padding.top + priceHeight + gap + volumeHeight;
+
+  const scaleY = (value: number) =>
+    padding.top + ((extendedMax - value) / (extendedMax - extendedMin)) * priceHeight;
+  const scaleVolumeY = (value: number) =>
+    volumeBase - (value / Math.max(maxVolume, 1)) * volumeHeight;
+
+  const allCandles: CandlestickCandleGeometry<T>[] = data.map((datum, index) => {
+    const open = getNumericValue(datum, openKey, index);
+    const close = getNumericValue(datum, closeKey, index);
+    const high = getNumericValue(datum, highKey, index);
+    const low = getNumericValue(datum, lowKey, index);
+    const volume = getNumericValue(datum, volumeKey, index);
+    const centerX = padding.left + step * index + step / 2;
+    const openY = scaleY(open);
+    const closeY = scaleY(close);
+    const highY = scaleY(high);
+    const lowY = scaleY(low);
+    const bodyTop = Math.min(openY, closeY);
+    const bodyBottom = Math.max(openY, closeY);
+    return {
+      datum,
+      index,
+      centerX,
+      openY,
+      closeY,
+      highY,
+      lowY,
+      bodyTop,
+      bodyHeight: Math.max(bodyBottom - bodyTop, 2),
+      bodyWidth,
+      volumeTop: scaleVolumeY(volume),
+      isUp: close >= open,
+    };
+  });
+
+  const visibleCount = Math.max(1, Math.round(allCandles.length * progress));
+  const candles = allCandles.slice(0, visibleCount);
+  const labels = allCandles.filter(
+    (_, index) =>
+      index === 0 ||
+      index === allCandles.length - 1 ||
+      index === Math.floor((allCandles.length - 1) / 2)
+  );
+
+  const overlayPaths = (props.overlays ?? []).map((overlay, overlayIndex) => {
+    const accessor = overlay.valueKey ?? closeKey;
+    const ma = computeMovingAverage(data, overlay.window, accessor);
+    const points = allCandles
+      .map((candle, index) => {
+        const value = ma[index];
+        return value === null ? null : { x: candle.centerX, y: scaleY(value) };
+      })
+      .filter((point): point is DatumPoint => point !== null);
+
+    return {
+      key: `overlay-${overlayIndex}`,
+      path: buildPolylinePath(points),
+      color: typeof overlay.color === 'string' ? overlay.color : '#60a5fa',
+      strokeWidth: overlay.strokeWidth ?? 1.8,
+      label: overlay.label ?? `SMA ${overlay.window}`,
+    };
+  });
+
+  return {
+    candles,
+    allCandles,
+    labels,
+    padding,
+    chartWidth,
+    priceHeight,
+    volumeHeight,
+    gap,
+    volumeBase,
+    step,
+    minPrice: extendedMin,
+    maxPrice: extendedMax,
+    maxVolume,
+    overlayPaths,
+  };
+}
+
+export function computeCandlestickNavigatorGeometry<T>(
+  props: Pick<CandlestickNavigatorProps<T>, 'data' | 'width' | 'start' | 'end' | 'closeKey' | 'labelKey'>
+) {
+  const { data, width, start, end, closeKey } = props;
+  const usableWidth = Math.max(width - 24, 1);
+  let maxClose = -Infinity;
+  let minClose = Infinity;
+
+  for (let i = 0; i < data.length; i++) {
+    const close = getNumericValue(data[i], closeKey, i);
+    if (close > maxClose) maxClose = close;
+    if (close < minClose) minClose = close;
+  }
+
+  const span = Math.max(maxClose - minClose, 1);
+  const points: DatumPoint[] = data.map((datum, index) => {
+    const close = getNumericValue(datum, closeKey, index);
+    const x = 12 + (index / Math.max(data.length - 1, 1)) * usableWidth;
+    const y = 44 - ((close - minClose) / span) * 28;
+    return { x, y };
+  });
+
+  const sparklinePath = buildPolylinePath(points);
+  const viewportLeft = 12 + (start / Math.max(data.length, 1)) * usableWidth;
+  const viewportWidth = ((end - start) / Math.max(data.length, 1)) * usableWidth;
+
+  return {
+    sparklinePath,
+    viewportLeft,
+    viewportWidth: Math.max(viewportWidth, 24),
+    usableWidth,
+  };
+}
+
+export function findNearestCandlestick<T>(
+  candles: CandlestickCandleGeometry<T>[],
+  x: number
+): CandlestickCandleGeometry<T> | null {
+  if (candles.length === 0) {
+    return null;
+  }
+
+  let nearest = candles[0];
+  let minDist = Math.abs(x - candles[0].centerX);
+
+  for (let i = 1; i < candles.length; i++) {
+    const dist = Math.abs(x - candles[i].centerX);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = candles[i];
+    }
+  }
+
+  return nearest;
 }

@@ -5,4 +5,6 @@ export * from './components/LineChart';
 export * from './components/AreaChart';
 export * from './components/BarChart';
 export * from './components/DonutChart';
+export * from './components/CandlestickChart';
+export * from './components/CandlestickNavigator';
 export * from './headless/models';

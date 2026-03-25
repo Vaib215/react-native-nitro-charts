@@ -8,7 +8,7 @@ High-performance chart primitives for Expo and React Native, built with Skia, D3
 
 - Skia-powered rendering
 - Hooks-first API for derived geometry
-- Interactive line, area, bar, and donut charts
+- Interactive line, area, bar, donut, and candlestick charts
 - Native Nitro engine for hot paths on iOS and Android
 - TypeScript fallback engine for web and unsupported native environments
 - Headless helpers for custom chart experiences
@@ -128,6 +128,45 @@ Key props:
 - `progress`
 - `onSlicePress`
 
+### `CandlestickChart`
+
+Interactive OHLCV candlestick chart with volume bars, moving average overlays, crosshair inspection, and pinch-to-zoom.
+
+Key props:
+
+- `data`
+- `openKey`
+- `highKey`
+- `lowKey`
+- `closeKey`
+- `volumeKey`
+- `labelKey`
+- `width`
+- `height`
+- `progress`
+- `padding`
+- `overlays`
+- `upColor`
+- `downColor`
+- `onPinchZoom`
+- `formatPriceLabel`
+- `formatVolumeLabel`
+
+### `CandlestickNavigator`
+
+Timeline range selector that pairs with `CandlestickChart`. Renders a sparkline overview with draggable viewport handles for panning and resizing the visible window.
+
+Key props:
+
+- `data`
+- `closeKey`
+- `labelKey`
+- `width`
+- `start`
+- `end`
+- `onPanWindow`
+- `onResizeWindow`
+
 ## Hooks
 
 ### `useLineChart(props)`
@@ -166,6 +205,10 @@ Computes the nearest rendered point for a cartesian chart.
 
 Tiny helper for storing the currently active datum with React transitions.
 
+### `useChartEntrance(keys, duration?)`
+
+Animates a progress value from 0 to 1 using an eased entrance curve. Useful for chart reveal animations.
+
 ## Headless Utilities
 
 The package also exports geometry helpers from `headless/models` for custom rendering and interaction layers:
@@ -177,6 +220,9 @@ The package also exports geometry helpers from `headless/models` for custom rend
 - `findNearestPoint`
 - `findNearestBar`
 - `findNearestDonutSlice`
+- `computeCandlestickGeometry`
+- `computeCandlestickNavigatorGeometry`
+- `findNearestCandlestick`
 
 These are useful when you want the chart math without the built-in components.
 

@@ -129,3 +129,86 @@ export type ChartEngine = {
   downsampleSeries(input: DownsampleInput): DatumPoint[];
   findNearestDatum(input: HitTestInput): NearestPointResult;
 };
+
+export type CandlestickCandleGeometry<T> = {
+  datum: T;
+  index: number;
+  centerX: number;
+  openY: number;
+  closeY: number;
+  highY: number;
+  lowY: number;
+  bodyTop: number;
+  bodyHeight: number;
+  bodyWidth: number;
+  volumeTop: number;
+  isUp: boolean;
+};
+
+export type CandlestickOverlay<T> = {
+  window: number;
+  valueKey?: NumericAccessor<T>;
+  color?: ColorValue;
+  strokeWidth?: number;
+  label?: string;
+};
+
+export type CandlestickGeometry<T> = {
+  candles: CandlestickCandleGeometry<T>[];
+  allCandles: CandlestickCandleGeometry<T>[];
+  labels: CandlestickCandleGeometry<T>[];
+  padding: ChartPadding;
+  chartWidth: number;
+  priceHeight: number;
+  volumeHeight: number;
+  gap: number;
+  volumeBase: number;
+  step: number;
+  minPrice: number;
+  maxPrice: number;
+  maxVolume: number;
+  overlayPaths: Array<{
+    key: string;
+    path: string;
+    color: string;
+    strokeWidth: number;
+    label: string;
+  }>;
+};
+
+export type CandlestickChartProps<T> = {
+  data: T[];
+  width: number;
+  height: number;
+  openKey: NumericAccessor<T>;
+  highKey: NumericAccessor<T>;
+  lowKey: NumericAccessor<T>;
+  closeKey: NumericAccessor<T>;
+  volumeKey: NumericAccessor<T>;
+  labelKey?: CategoryAccessor<T>;
+  progress?: number;
+  padding?: Partial<ChartPadding>;
+  volumeHeight?: number;
+  gap?: number;
+  upColor?: ColorValue;
+  downColor?: ColorValue;
+  style?: ViewStyle;
+  overlays?: CandlestickOverlay<T>[];
+  minVisibleCount?: number;
+  onPinchZoom?: (nextVisibleCount: number, anchorRatio: number) => void;
+  formatPriceLabel?: (value: number) => string;
+  formatVolumeLabel?: (value: number) => string;
+};
+
+export type CandlestickNavigatorProps<T> = {
+  data: T[];
+  width: number;
+  height?: number;
+  start: number;
+  end: number;
+  closeKey: NumericAccessor<T>;
+  labelKey?: CategoryAccessor<T>;
+  style?: ViewStyle;
+  onPanWindow: (nextCenter: number) => void;
+  onResizeWindow: (edge: 'left' | 'right', nextIndex: number) => void;
+};
